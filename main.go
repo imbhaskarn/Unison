@@ -1,12 +1,14 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
-	"log"
 	"Unison/db"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"log"
 )
 
 func main() {
+	godotenv.Load()
 	if err := db.InitDB(); err != nil {
 		log.Fatal("Error initializing database: ", err)
 	}
@@ -14,8 +16,10 @@ func main() {
 	router := gin.Default()
 	router.GET("/", func(c *gin.Context) {
 		log.Println("Received a request on /")
-		c.String(200, "Hello, World!")
+		c.JSON(200, gin.H{
+			"message": "Welcome to Unison!",
+		})
 	})
-	log.Println("Server is starting on :8080")
+	log.Println("server is starting on: http://localhost:8080")
 	log.Fatal(router.Run(":8080"))
 }
