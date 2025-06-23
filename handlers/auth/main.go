@@ -3,8 +3,11 @@ package authHandlers
 import (
 	"Unison/db"
 	"log"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Login handles user login requests.
@@ -15,9 +18,9 @@ func Login(c *gin.Context) {
 
 // Register handles user registration requests.
 func Register(c *gin.Context) {
-	var resBody map[string]interface{}
+	var resBody map[string]any
 	if err := c.ShouldBindJSON(&resBody); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request"})
+		c.JSON(400, gin.H{"error": "Invalid request body"})
 		return
 	}
 	email := resBody["email"]
@@ -31,11 +34,12 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	findUser := db.DB.QueryRow("Select id from users where email = ?", email)
+	findUser := db.DB.QueryRow("Select id from users where email = $1", email)
 	var userID int
 	if err := findUser.Scan(&userID); err != nil {
 		if err.Error() != "sql: no rows in result set" {
-			c.JSON(500, gin.H{"error": "Database error"})
+			log.Println("Error querying database:", err)
+			c.JSON(500, gin.H{"error": "Database error1"})
 			return
 		}
 	}
@@ -45,7 +49,35 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	c.JSON(201, gin.H{"message": "User registered successfully"})
+	var err error
+	hash, err := bcrypt.GenerateFromPassword([]byte(password.(string)), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println("Error hashing password:", err)
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+	log.Println("Password hashed successfully", string(hash))
+	_, err = db.DB.Exec("INSERT INTO users (email, password) VALUES ($1, $2)", email.(string), string(hash))
+
+	if err != nil {
+		log.Println("Error inserting user into database:", err)
+		c.JSON(500, gin.H{"error": "Database error2", "details": err.Error()})
+		return
+	}
+	log.Println("User registered successfully:", email)
+
+	data, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": email,
+	}).SignedString([]byte(os.Getenv("SESSION_SECRET")))
+
+	if err != nil {
+		log.Println("Error generating JWT:", err)
+		c.JSON(500, gin.H{"error": "Internal server error"})
+		return
+	}
+	log.Println("JWT generated successfully:", data)
+
+	c.JSON(201, gin.H{"message": "User registered successfully", "token": data})
 }
 
 // RefreshToken handles token refresh requests.
