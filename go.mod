@@ -10,6 +10,8 @@ require (
 
 require github.com/gorilla/websocket v1.5.3
 
+require github.com/google/uuid v1.6.0 // direct
+
 require (
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
