@@ -8,7 +8,7 @@ import (
 )
 
 func RegisterRoutes(router *gin.RouterGroup) {
-	router.POST("/register", authHandlers.Register)
+	router.POST("/signup", authHandlers.Register)
 	router.POST("/login", authHandlers.Login)
 	router.GET("/user", middlewares.AuthRequired(), authHandlers.UserHandler)
 }

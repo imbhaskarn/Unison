@@ -3,10 +3,13 @@ package main
 import (
 	"Unison/db"
 	"Unison/routes"
-	"github.com/gin-gonic/gin"
 	"Unison/websocket"
-	"github.com/joho/godotenv"
 	"log"
+	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -18,6 +21,14 @@ func main() {
 
 	router := routers.SetupRouter()
 
+router.Use(cors.New(cors.Config{
+  AllowOrigins:     []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+  AllowMethods:     []string{"GET", "PUT", "POST", "DELETE"},
+  AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+  ExposeHeaders:    []string{"Content-Length"},
+  AllowCredentials: true,
+  MaxAge: 12 * time.Hour,
+}))
 
 
 	router.GET("/ws", websocket.HandleWebSocket)

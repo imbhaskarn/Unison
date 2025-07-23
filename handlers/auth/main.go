@@ -2,13 +2,12 @@ package authHandlers
 
 import (
 	"Unison/db"
-	"log"
-	"os"
-	"time"
-
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
+	"log"
+	"os"
+	"time"
 )
 
 func Login(c *gin.Context) {
@@ -89,7 +88,9 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	findUser := db.DB.QueryRow("Select id from users where email = $1", email)
+	log.Println("Attempting to log in with email:", email, " and password:", password)
+
+	findUser := db.DB.QueryRow("Select id, email from users where email = $1", email)
 
 	type User struct {
 		id    int
@@ -104,9 +105,9 @@ func Register(c *gin.Context) {
 			return
 		}
 	}
-	log.Println("User ID found:", user.id)
+	log.Println("User ID found:", user.id, "Email found:", user.email)
 	if user.id != 0 {
-		c.JSON(400, gin.H{"error": "User already exists"})
+		c.JSON(400, gin.H{"result": false, "message": "User already exists"})
 		return
 	}
 

@@ -10,31 +10,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 type Client struct {
 	UserID    string
 	Email     string
-	ID        string
 	Conn      *websocket.Conn
 	IP        string
 	UserAgent string
 	ConnTime  time.Time
 }
 
-var clients = make(map[string]*Client)
+type Message struct {
+	To      string `json:"to"`      // recipient UserID
+	Message string `json:"message"` // actual message content
+}
+
+var clients = make(map[string]*Client) // key: UserID
 
 func (c *Client) Register() {
-	clients[c.ID] = c
+	clients[c.UserID] = c
 }
 
 func (c *Client) Unregister() {
 	if c.Conn != nil {
 		c.Conn.Close()
 	}
-	delete(clients, c.ID)
+	delete(clients, c.UserID)
 }
 
 var upgrader = websocket.Upgrader{
@@ -52,22 +55,19 @@ func HandleWebSocket(c *gin.Context) {
 	}
 
 	parsedToken, err := helpers.VerifyToken(authHeader)
-	if err != nil || parsedToken == nil {
+	if err != nil || parsedToken == nil || !parsedToken.Valid {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 		return
 	}
 
-	if !parsedToken.Valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-		return
-	}
 	claims, ok := parsedToken.Claims.(jwt.MapClaims)
 	if !ok || claims["id"] == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
 		return
 	}
-	c.Set("userID", fmt.Sprintf("%v", claims["id"]))
-	c.Set("email", claims["email"])
+
+	userID := fmt.Sprintf("%v", claims["id"])
+	email := fmt.Sprintf("%v", claims["email"])
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -76,35 +76,45 @@ func HandleWebSocket(c *gin.Context) {
 	}
 
 	client := &Client{
-		UserID:    c.GetString("userID"),
-		Email:     c.GetString("email"),
-		ID:        uuid.New().String(), // Unique UUID
+		UserID:    userID,
+		Email:     email,
 		Conn:      conn,
 		IP:        c.ClientIP(),
 		UserAgent: c.Request.UserAgent(),
 		ConnTime:  time.Now(),
 	}
 	client.Register()
-
-	print("email:", c.GetString("email"))
-
 	defer client.Unregister()
 	defer conn.Close()
 
-	welcomeMsg, _ := json.Marshal(map[string]interface{}{"message": "Welcome to the WebSocket server!", "client": client})
-
+	welcomeMsg, _ := json.Marshal(map[string]interface{}{"message": "Welcome to the WebSocket server!", "userID": userID})
 	conn.WriteMessage(websocket.TextMessage, welcomeMsg)
 
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("WebSocket read error (conn %s): %v", client.ID, err)
+			log.Printf("WebSocket read error (user %s): %v", client.UserID, err)
 			break
 		}
-		log.Printf("Received from %s: %s", client.ID, msg)
-		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
-			log.Printf("WebSocket write error (conn %s): %v", client.ID, err)
-			break
+
+		var incoming Message
+		if err := json.Unmarshal(msg, &incoming); err != nil {
+			log.Printf("Invalid message format from %s: %v", client.UserID, err)
+			continue
+		}
+
+		log.Printf("User %s wants to send message to %s: %s", client.UserID, incoming.To, incoming.Message)
+
+		if receiver, ok := clients[incoming.To]; ok && receiver.Conn != nil {
+			outgoing, _ := json.Marshal(map[string]interface{}{
+				"from":    client.UserID,
+				"message": incoming.Message,
+			})
+			if err := receiver.Conn.WriteMessage(websocket.TextMessage, outgoing); err != nil {
+				log.Printf("Error sending message to %s: %v", incoming.To, err)
+			}
+		} else {
+			log.Printf("User %s not connected", incoming.To)
 		}
 	}
 }
