@@ -128,7 +128,7 @@ func Register(c *gin.Context) {
 	}
 	log.Println("User registered successfully:", email)
 
-	data, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	jwtToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": user.email,
 		"id":    user.id,
 		"exp":   jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
@@ -139,11 +139,25 @@ func Register(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "Internal server error"})
 		return
 	}
-	log.Println("JWT generated successfully:", data)
+	log.Println("JWT generated successfully:", jwtToken)
 
-	c.JSON(201, gin.H{"message": "User registered successfully", "token": data})
+	c.JSON(201, gin.H{"message": "User registered successfully", "accessToken": jwtToken})
 }
 
 func UserHandler(c *gin.Context) {
-	c.JSON(200, gin.H{"message": "User handler", "userID": c.GetString("userID"), "email": c.GetString("email")})
+	userID := c.GetString("userID")
+	if userID == "" {
+		c.JSON(401, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	var email string
+	err := db.DB.QueryRow("SELECT email FROM users WHERE id = $1", userID).Scan(&email)
+	if err != nil {
+		log.Println("Error fetching user data:", err)
+		c.JSON(404, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "User handler", "userID": userID, "email": email})
 }
