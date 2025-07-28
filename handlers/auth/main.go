@@ -11,153 +11,141 @@ import (
 )
 
 func Login(c *gin.Context) {
-	var resBody map[string]any
-	if err := c.ShouldBindJSON(&resBody); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request body"})
+	var body map[string]any
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"success": false, "error": "Invalid request body"})
 		return
 	}
-	email := resBody["email"]
+	email := body["email"]
 	if email == nil {
-		c.JSON(400, gin.H{"error": "Email is required"})
+		c.JSON(400, gin.H{"success": false, "error": "Email is required"})
 		return
 	}
-	password := resBody["password"]
+	password := body["password"]
 	if password == nil {
-		c.JSON(400, gin.H{"error": "Password is required"})
+		c.JSON(400, gin.H{"success": false, "error": "Password is required"})
 		return
 	}
 
-	findUser := db.DB.QueryRow("Select id, \"hashedPassword\" from users where email = $1", email)
+	findUser := db.DB.QueryRow("SELECT id, \"hashedPassword\" FROM users WHERE email = $1", email)
 
-	type User struct {
+	var user struct {
 		id             int
 		hashedPassword string
 	}
-
-	var user User
 	if err := findUser.Scan(&user.id, &user.hashedPassword); err != nil {
-		if err.Error() != "sql: no rows in result set" {
-			log.Println("Error querying database:", err)
-			c.JSON(500, gin.H{"error": "Database error1"})
-			return
-		}
+		log.Println("Database error:", err)
+		c.JSON(401, gin.H{"success": false, "error": "Invalid email or password"})
+		return
 	}
 	if user.id == 0 {
-		log.Println("User not found:", email)
-		c.JSON(401, gin.H{"error": "Invalid email or password"})
+		c.JSON(401, gin.H{"success": false, "error": "Invalid email or password"})
 		return
 	}
 
 	err := bcrypt.CompareHashAndPassword([]byte(user.hashedPassword), []byte(password.(string)))
-
 	if err != nil {
-		log.Println("Invalid password:", err)
-		c.JSON(401, gin.H{"error": "Invalid email or password"})
+		c.JSON(401, gin.H{"success": false, "error": "Invalid email or password"})
 		return
 	}
 
-	data, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": email,
 		"id":    user.id,
 		"exp":   jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 	}).SignedString([]byte(os.Getenv("SESSION_SECRET")))
 	if err != nil {
-		log.Println("Error generating JWT:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+		log.Println("JWT generation error:", err)
+		c.JSON(500, gin.H{"success": false, "error": "Internal server error"})
 		return
 	}
 
-	log.Println("User logged in successfully:", email)
-	c.JSON(200, gin.H{"message": "Login successful", "token": data})
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "Login successful",
+		"data": gin.H{
+			"accessToken": token,
+			"email":       email,
+		},
+	})
 }
 
 func Register(c *gin.Context) {
-	var resBody map[string]any
-	if err := c.ShouldBindJSON(&resBody); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request body"})
+	var body map[string]any
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(400, gin.H{"success": false, "error": "Invalid request body"})
 		return
 	}
-	email := resBody["email"]
-	if email == nil {
-		c.JSON(400, gin.H{"error": "Email is required"})
-		return
-	}
-	password := resBody["password"]
-	if password == nil {
-		c.JSON(400, gin.H{"error": "Password is required"})
+	email := body["email"]
+	password := body["password"]
+	if email == nil || password == nil {
+		c.JSON(400, gin.H{"success": false, "error": "Email and password are required"})
 		return
 	}
 
-	log.Println("Attempting to log in with email:", email, " and password:", password)
+	findUser := db.DB.QueryRow("SELECT id, email FROM users WHERE email = $1", email)
 
-	findUser := db.DB.QueryRow("Select id, email from users where email = $1", email)
-
-	type User struct {
+	var user struct {
 		id    int
 		email string
 	}
-
-	var user User
-	if err := findUser.Scan(&user.id, &user.email); err != nil {
-		if err.Error() != "sql: no rows in result set" {
-			log.Println("Error querying database:", err)
-			c.JSON(500, gin.H{"error": "Database error1"})
-			return
-		}
-	}
-	log.Println("User ID found:", user.id, "Email found:", user.email)
-	if user.id != 0 {
-		c.JSON(400, gin.H{"result": false, "message": "User already exists"})
+	if err := findUser.Scan(&user.id, &user.email); err == nil && user.id != 0 {
+		c.JSON(400, gin.H{"success": false, "error": "User already exists"})
 		return
 	}
 
-	var err error
 	hash, err := bcrypt.GenerateFromPassword([]byte(password.(string)), bcrypt.DefaultCost)
 	if err != nil {
-		log.Println("Error hashing password:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+		c.JSON(500, gin.H{"success": false, "error": "Error while hashing password"})
 		return
 	}
-	log.Println("Password hashed successfully", string(hash))
+
 	_, err = db.DB.Exec("INSERT INTO users (email, \"hashedPassword\") VALUES ($1, $2)", email.(string), string(hash))
-
 	if err != nil {
-		log.Println("Error inserting user into database:", err)
-		c.JSON(500, gin.H{"error": "Database error2", "details": err.Error()})
+		c.JSON(500, gin.H{"success": false, "error": "Error inserting user into database"})
 		return
 	}
-	log.Println("User registered successfully:", email)
 
-	jwtToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"email": user.email,
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"email": email,
 		"id":    user.id,
 		"exp":   jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 	}).SignedString([]byte(os.Getenv("SESSION_SECRET")))
-
 	if err != nil {
-		log.Println("Error generating JWT:", err)
-		c.JSON(500, gin.H{"error": "Internal server error"})
+		c.JSON(500, gin.H{"success": false, "error": "JWT generation failed"})
 		return
 	}
-	log.Println("JWT generated successfully:", jwtToken)
 
-	c.JSON(201, gin.H{"message": "User registered successfully", "accessToken": jwtToken})
+	c.JSON(201, gin.H{
+		"success": true,
+		"message": "User registered successfully",
+		"data": gin.H{
+			"email":       email,
+			"accessToken": token,
+		},
+	})
 }
 
 func UserHandler(c *gin.Context) {
 	userID := c.GetString("userID")
 	if userID == "" {
-		c.JSON(401, gin.H{"error": "Unauthorized"})
+		c.JSON(401, gin.H{"success": false, "error": "Unauthorized"})
 		return
 	}
 
 	var email string
 	err := db.DB.QueryRow("SELECT email FROM users WHERE id = $1", userID).Scan(&email)
 	if err != nil {
-		log.Println("Error fetching user data:", err)
-		c.JSON(404, gin.H{"error": "User not found"})
+		c.JSON(404, gin.H{"success": false, "error": "User not found"})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "User handler", "userID": userID, "email": email})
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "User fetched successfully",
+		"data": gin.H{
+			"userID": userID,
+			"email":  email,
+		},
+	})
 }
