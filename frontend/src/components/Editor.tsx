@@ -7,18 +7,20 @@ const Editor = () => {
   const [editor] = useState(() => withReact(createEditor()));
   const initialValue = [{ type: "paragraph", children: [{ text: "" }] }];
   return (
-    <div>
+    <div className="flex-1 w-full p-2 ">
       <Slate editor={editor} initialValue={initialValue}>
         <Editable
           placeholder="Type something..."
-          className="p-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="p-2 rounded-md w-full h-full"
+          style={{
+            width: "100%",
+            height: "100%",
+            border: "none",
+            outline: "none",
+            boxShadow: "none",
+          }}
         />
       </Slate>
-      <div className="mt-4">
-        <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-          Save
-        </button>
-      </div>
     </div>
   );
 };

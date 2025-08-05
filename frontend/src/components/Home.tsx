@@ -1,6 +1,7 @@
 import Cookies from "js-cookie";
 import { useEffect, useState } from "react";
 import apiClient from "../utils/apiClient";
+import { Button } from "./ui/button";
 import Editor from "./Editor";
 
 const Home = () => {
@@ -21,49 +22,60 @@ const Home = () => {
         })
         .catch((err) => {
           console.log(err);
-          // window.location.href = "/login";
+          // Optionally handle token error
         });
     }
   }, []);
 
+  const handleLogout = () => {
+    Cookies.remove("accessToken");
+    setUserEmail("");
+    window.location.href = "/login";
+  };
+
   return (
-    <div>
-      <nav className="flex items-center justify-between px-8 py-4 bg-gray-100 border-b border-gray-300">
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
+      <nav className="flex items-center justify-between px-8 py-4 border-b border-gray-300 dark:border-gray-700">
         <div className="flex items-center">
-          {/* <img src="/logo192.png" alt="Logo" className="h-10 mr-4" /> */}
           <span className="font-bold text-xl">Unison</span>
         </div>
         <div className="flex items-center gap-4">
-          <span>{userEmail}</span>
-          {!!userEmail.length ? (
-            <button
-              className="px-4 py-2 bg-blue-700 text-white rounded border-none cursor-pointer hover:bg-blue-800 transition-colors duration-300"
-              onClick={() => {
-                // Add logout logic here
-                alert("Logged out!");
-              }}
-            >
+          <span className="text-sm">{userEmail}</span>
+          {userEmail ? (
+            <Button variant="outline" onClick={handleLogout}>
               Logout
-            </button>
+            </Button>
           ) : (
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors duration-300"
+            <Button
+              variant="outline"
               onClick={() => {
                 window.location.href = "/login";
               }}
             >
               Sign In
-            </button>
+            </Button>
           )}
         </div>
       </nav>
-      <div className="flex justify-center items-start min-h-[80vh] bg-blue-50">
-        <div className="flex-1" />
-        <div className="flex-2 max-w-3xl w-full p-8">
-          <Editor />
+
+      <main className="w-full flex items-center justify-center  pt-4 h-full">
+        <div className="flex w-full h-full items-start justify-center">
+          <div className="flex  h-full overflow-hidden flex-col p-4 w-full max-w-6xl bg-grey-50 dark:bg-gray-800 rounded-lg shadow-md">
+            {/* <div className="flex items-center justify-start">
+              <div className="border-1 w-full p-2 rounded-md">toolbar</div>
+            </div> */}
+            <div className="flex-1 h-full overflow-hidden flex">
+              {/* <Editor /> */}
+              <form className="flex-1 w-full p-2">
+                <textarea
+                  className="w-full h-full p-2 border-1 rounded-md resize-none"
+                  placeholder="Type something..."
+                ></textarea>
+              </form>
+            </div>
+          </div>
         </div>
-        <div className="flex-1" />
-      </div>
+      </main>
     </div>
   );
 };
